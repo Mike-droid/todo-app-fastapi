@@ -1,4 +1,3 @@
-```markdown
 # FastAPI To-Do List API
 
 Una API REST sencilla y liviana para gestionar una lista de tareas (To-Do List), desarrollada con **FastAPI** y **Pydantic**. 
@@ -84,19 +83,6 @@ fastapi-todo/
 ├── requirements.txt  # Lista de dependencias del proyecto
 ├── .gitignore        # Archivos ignorados por Git
 └── README.md         # Documentación del proyecto
-
-```
-
-```
-
----
-
-### 💡 Tip rápido para crearlo desde tu consola en Ubuntu:
-
-Puedes crear el archivo y abrirlo directamente con el editor nano desde tu terminal:
-
-```bash
-nano README.md
 
 ```
 
