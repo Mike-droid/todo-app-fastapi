@@ -1,0 +1,37 @@
+name: Pull Request Review & CI
+
+# Evento que dispara el workflow: cuando hay un PR hacia 'main' o 'master'
+on:
+  pull_request:
+    branches:
+      - main
+      - master
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    name: Run Pytest Code Verification
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Clonar el repositorio dentro del runner de GitHub
+      - name: Checkout repository code
+        uses: actions/checkout@v4
+
+      # 2. Configurar el entorno de Python
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip" # Acelera las ejecuciones guardando las dependencias en caché
+
+      # 3. Instalar las dependencias del proyecto
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      # 4. Ejecutar las pruebas unitarias con pytest
+      - name: Run unit tests with pytest
+        run: |
+          pytest -v
