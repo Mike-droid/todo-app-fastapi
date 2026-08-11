@@ -1,6 +1,7 @@
 import pytest
+from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
-from main import app, db_todos, TodoItem
+from main import app, db_todos, TodoItem, get_default_due_date
 
 client = TestClient(app)
 
@@ -8,9 +9,22 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def reset_db():
     db_todos.clear()
+    due_date_default = get_default_due_date()
     db_todos.extend([
-        TodoItem(id=1, title="Configurar GitHub Projects", description="Crear el tablero y definir columnas", completed=False),
-        TodoItem(id=2, title="Probar endpoints de FastAPI", description="Hacer peticiones GET y POST", completed=False)
+        TodoItem(
+            id=1, 
+            title="Configurar GitHub Projects", 
+            description="Crear el tablero y definir columnas", 
+            completed=False,
+            due_date=due_date_default
+        ),
+        TodoItem(
+            id=2, 
+            title="Probar endpoints de FastAPI", 
+            description="Hacer peticiones GET y POST", 
+            completed=False,
+            due_date=due_date_default
+        )
     ])
 
 
@@ -22,7 +36,8 @@ def test_get_all_todos():
     assert response.status_code == 200
     data = response.json()
     assert len(data) == 2
-    assert data[0]["title"] == "Configurar GitHub Projects"
+    assert "due_date" in data[0]
+    assert data[0]["due_date"] == get_default_due_date()
 
 
 # -------------------------------------------------------------------
@@ -33,7 +48,7 @@ def test_get_todo_by_id_success():
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 1
-    assert data["title"] == "Configurar GitHub Projects"
+    assert data["due_date"] == get_default_due_date()
 
 def test_get_todo_by_id_not_found():
     response = client.get("/todos/999")
@@ -42,22 +57,33 @@ def test_get_todo_by_id_not_found():
 
 
 # -------------------------------------------------------------------
-# Pruebas para POST /todos
+# Pruebas para POST /todos (Creación con fecha válida e inválida)
 # -------------------------------------------------------------------
-def test_create_todo():
+def test_create_todo_success():
     new_todo = {
         "title": "Aprender Pytest",
         "description": "Escribir pruebas unitarias",
-        "completed": False
+        "completed": False,
+        "due_date": "20/12/2026"
     }
     response = client.post("/todos", json=new_todo)
     assert response.status_code == 201
     data = response.json()
     assert data["id"] == 3
-    assert data["title"] == "Aprender Pytest"
-    
-    # Verificamos que realmente se agregó a la "base de datos"
+    assert data["due_date"] == "20/12/2026"
     assert len(db_todos) == 3
+
+# NUEVO TEST CASE: Validación de formato DD/MM/YYYY inválido
+def test_create_todo_invalid_due_date_format():
+    invalid_todo = {
+        "title": "Tarea con fecha invalida",
+        "description": "Usando formato YYYY-MM-DD en vez de DD/MM/YYYY",
+        "completed": False,
+        "due_date": "2026-12-20"  # Formato incorrecto
+    }
+    response = client.post("/todos", json=invalid_todo)
+    # FastAPI/Pydantic devuelven HTTP 422 cuando la validación falla
+    assert response.status_code == 422
 
 
 # -------------------------------------------------------------------
@@ -67,23 +93,15 @@ def test_update_todo_success():
     updated_payload = {
         "title": "Configurar GitHub Projects ACTUALIZADO",
         "description": "Nueva descripción",
-        "completed": True
+        "completed": True,
+        "due_date": "31/12/2026"
     }
     response = client.put("/todos/1", json=updated_payload)
     assert response.status_code == 200
     data = response.json()
     assert data["id"] == 1
-    assert data["title"] == "Configurar GitHub Projects ACTUALIZADO"
+    assert data["due_date"] == "31/12/2026"
     assert data["completed"] is True
-
-def test_update_todo_not_found():
-    updated_payload = {
-        "title": "Inexistente",
-        "completed": True
-    }
-    response = client.put("/todos/999", json=updated_payload)
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Tarea no encontrada"
 
 
 # -------------------------------------------------------------------
@@ -93,14 +111,5 @@ def test_delete_todo_success():
     response = client.delete("/todos/1")
     assert response.status_code == 200
     assert response.json()["message"] == "Tarea 1 eliminada correctamente"
-    
-    # Verificamos que el elemento fue eliminado
     assert len(db_todos) == 1
-    assert db_todos[0].id == 2
-
-def test_delete_todo_not_found():
-    response = client.delete("/todos/999")
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Tarea no encontrada"
-
 

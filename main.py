@@ -1,20 +1,47 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
+from datetime import datetime, timedelta
 
 app = FastAPI(title="Simple To-Do API")
 
-# Esquema para representarlo en las peticiones y respuestas
+# Función para obtener la fecha de hoy + 5 días en formato DD/MM/YYYY
+def get_default_due_date() -> str:
+    return (datetime.now() + timedelta(days=5)).strftime("%d/%m/%Y")
+
+# Esquema actualizado para representarlo en las peticiones y respuestas
 class TodoItem(BaseModel):
     id: Optional[int] = None
     title: str
     description: Optional[str] = None
     completed: bool = False
+    due_date: str  # Formato esperado: DD/MM/YYYY
 
-# Base de datos temporal en memoria
+    @field_validator('due_date')
+    @classmethod
+    def validate_due_date_format(cls, value: str) -> str:
+        try:
+            datetime.strptime(value, "%d/%m/%Y")
+        except ValueError:
+            raise ValueError("El campo 'due_date' debe tener el formato DD/MM/YYYY (ej. 25/12/2026)")
+        return value
+
+# Base de datos temporal en memoria con el nuevo campo due_date
 db_todos: List[TodoItem] = [
-    TodoItem(id=1, title="Configurar GitHub Projects", description="Crear el tablero y definir columnas", completed=False),
-    TodoItem(id=2, title="Probar endpoints de FastAPI", description="Hacer peticiones GET y POST", completed=False)
+    TodoItem(
+        id=1, 
+        title="Configurar GitHub Projects", 
+        description="Crear el tablero y definir columnas", 
+        completed=False,
+        due_date=get_default_due_date()
+    ),
+    TodoItem(
+        id=2, 
+        title="Probar endpoints de FastAPI", 
+        description="Hacer peticiones GET y POST", 
+        completed=False,
+        due_date=get_default_due_date()
+    )
 ]
 
 # 1. Obtener todas las tareas
@@ -55,5 +82,4 @@ def delete_todo(todo_id: int):
             db_todos.pop(index)
             return {"message": f"Tarea {todo_id} eliminada correctamente"}
     raise HTTPException(status_code=404, detail="Tarea no encontrada")
-
 
