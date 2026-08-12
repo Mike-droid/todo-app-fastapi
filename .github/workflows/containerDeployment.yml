@@ -1,0 +1,54 @@
+name: Container Build & CI Deployment
+
+# Se dispara en Pushes y Pull Requests a la rama principal
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  build-and-test-container:
+    name: Build & Test Docker Container
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Obtener el código fuente del repositorio
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Configurar Docker Buildx (soporte para BuildKit y caché en CI)
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Construir la imagen de Docker (sin publicarla aún)
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: fastapi-todo:ci-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 4. Probar que el contenedor levante y responda peticiones
+      - name: Test Container Execution & Health Check
+        run: |
+          # A. Iniciar el contenedor con la imagen recién construida
+          docker run -d --name test-api -p 8000:8000 fastapi-todo:ci-${{ github.sha }}
+          
+          # B. Esperar un par de segundos a que Uvicorn inicie
+          sleep 3
+          
+          # C. Realizar una petición HTTP GET al endpoint /todos
+          curl --fail http://localhost:8000/todos || exit 1
+          
+          # D. Limpiar el contenedor de prueba
+          docker stop test-api
+          docker rm test-api
