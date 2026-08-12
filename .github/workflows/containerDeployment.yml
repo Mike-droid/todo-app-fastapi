@@ -32,6 +32,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
+          load: true
           tags: fastapi-todo:ci-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
