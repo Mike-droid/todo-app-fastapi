@@ -46,7 +46,7 @@ pip install -r requirements.txt
 Con el entorno virtual activado, inicia el servidor de desarrollo con Uvicorn:
 
 ```bash
-uvicorn main:app --reload
+uvicorn src.main:app --reload
 
 ```
 
