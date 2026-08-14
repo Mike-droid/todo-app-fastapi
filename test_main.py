@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
-from main import app, db_todos, TodoItem, get_default_due_date
+from src.main import app, db_todos, TodoItem, get_default_due_date
 
 client = TestClient(app)
 
