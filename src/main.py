@@ -1,9 +1,27 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, field_validator
-from typing import List, Optional
+from fastapi import FastAPI
 from datetime import datetime, timedelta
+from typing import List, Optional
+from pydantic import BaseModel, field_validator
 
-app = FastAPI(title="Simple To-Do API")
+# --- Importaciones de OpenTelemetry ---
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# 1. Configurar el proveedor de trazas y el exportador
+provider = TracerProvider()
+# ConsoleSpanExporter imprime las trazas directamente en la consola (ideal para desarrollo)
+processor = BatchSpanProcessor(ConsoleSpanExporter())
+provider.add_span_processor(processor)
+
+# Establecer el proveedor global de trazas
+trace.set_tracer_provider(provider)
+
+app = FastAPI(title="Simple To-Do API con OpenTelemetry")
+
+# 2. Instrumentar automáticamente la aplicación FastAPI
+FastAPIInstrumentor.instrument_app(app)
 
 # Función para obtener la fecha de hoy + 5 días en formato DD/MM/YYYY
 def get_default_due_date() -> str:
