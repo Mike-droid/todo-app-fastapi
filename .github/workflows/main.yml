@@ -1,0 +1,135 @@
+name: Infrastructure & Container CI/CD (Terraform + AWS)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ==========================================
+  # ETAPA 1: Terraform (CI/CD de Infraestructura)
+  # ==========================================
+  terraform:
+    name: Terraform Validation & Deploy
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra
+    outputs:
+      ecr_url: ${{ steps.outputs.outputs.ecr_repository_url }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      # Solo genera el Plan para revisión en Pull Requests
+      - name: Terraform Plan
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color
+
+      # Aplica la infraestructura automáticamente solo en merges/pushes a main
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        run: terraform apply -auto-approve
+
+      # Captura la URL del repositorio ECR generado por Terraform
+      - name: Export Terraform Outputs
+        id: outputs
+        if: github.event_name == 'push'
+        run: |
+          ECR_URL=$(terraform-output -raw ecr_repository_url)
+          echo "ecr_repository_url=$ECR_URL" >> $GITHUB_OUTPUT
+
+  # ==========================================
+  # ETAPA 2: Docker & ECS (CI/CD de Aplicación)
+  # ==========================================
+  deploy-app:
+    name: Build, Test & Push Container to AWS
+    needs: terraform
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 1. CI Test del Contenedor localmente
+      - name: Build and Test Container
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: fastapi-todo:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Health Check
+        run: |
+          docker run -d --name test-api -p 8000:8000 fastapi-todo:test
+          sleep 3
+          curl --fail http://localhost:8000/todos || exit 1
+          docker stop test-api
+          docker rm test-api
+
+      # 2. CD: Publicar la imagen directamente en AWS ECR
+      - name: Push Docker Image to ECR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ needs.terraform.outputs.ecr_url }}:latest
+            ${{ needs.terraform.outputs.ecr_url }}:${{ github.sha }}
+          cache-from: type=gha
+
+      # 3. Forzar el despliegue del nuevo contenedor en ECS Fargate
+      - name: Force ECS Service Deployment
+        run: |
+          aws ecs update-service \
+            --cluster fastapi-todo-cluster \
+            --service fastapi-todo-service \
+            --force-new-deployment
